@@ -469,6 +469,12 @@ public static class DealerManager
         if (SpawnThisRound == 0)
             return;
 
+        if (Dealers.Count >= MaxPerRound)
+            return;
+
+        if (SpawnPositions.Count < 1)
+            return;
+
         if (remainingStartWait > 0f)
         {
             remainingStartWait -= Time.deltaTime;

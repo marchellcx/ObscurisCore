@@ -2,6 +2,8 @@
 
 using ObscurisCore.Features.Loadouts.Items;
 
+using PlayerRoles;
+
 namespace ObscurisCore.Features.Loadouts;
 
 /// <summary>
@@ -23,6 +25,11 @@ public class LoadoutDefinition
     /// Gets or sets the loadout's maximum health.
     /// </summary>
     public float? MaxHealth { get; set; }
+
+    /// <summary>
+    /// Gets or sets the role associated with the loadout.
+    /// </summary>
+    public RoleTypeId? Role { get; set; }
 
     /// <summary>
     /// Gets or sets a list of ammo.

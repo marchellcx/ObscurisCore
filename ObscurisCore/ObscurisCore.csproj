@@ -45,7 +45,7 @@
         <HintPath>$(PLUGIN_REFS)\NiveraAPI.dll</HintPath>
       </Reference>
       <Reference Include="NiveraAPI.ScpSl">
-        <HintPath>..\..\NiveraAPI\NiveraAPI.ScpSl\bin\Release\net48\NiveraAPI.ScpSl.dll</HintPath>
+        <HintPath>$(PLUGIN_REFS)\NiveraAPI.ScpSl.dll</HintPath>
       </Reference>
       <Reference Include="NorthwoodLib">
         <HintPath>$(PLUGIN_REFS)\NorthwoodLib-Publicized.dll</HintPath>

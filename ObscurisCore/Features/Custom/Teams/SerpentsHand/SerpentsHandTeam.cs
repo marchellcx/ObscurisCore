@@ -88,8 +88,13 @@ public class SerpentsHandTeam : CustomTeamHandler<SerpentsHandWave>
     /// </summary>
     public static bool WasSpawned { get; private set; }
 
+    /// <summary>
+    /// Gets the unique identifier for this team.
+    /// </summary>
+    public override string Id { get; } = "serpents-hand";
+
     /// <inheritdoc cref="CustomTeamHandler.Name"/>
-    public override string? Name { get; } = "Serpent's Hand";
+    public override string Name { get; set; } = "Serpent's Hand";
 
     /// <inheritdoc cref="CustomTeamHandler.IsSpawnable"/>
     public override bool IsSpawnable(ExPlayer player)

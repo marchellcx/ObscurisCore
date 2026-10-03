@@ -10,6 +10,7 @@ using NiveraAPI.ScpSl;
 using NiveraAPI.IO.Configs;
 
 using ObscurisCore.Features.Loadouts.Items;
+using LabExtended.Utilities;
 
 namespace ObscurisCore.Features.Loadouts;
 
@@ -19,7 +20,7 @@ namespace ObscurisCore.Features.Loadouts;
 public static class LoadoutManager
 {
     /// <summary>
-    /// Gets a list of all loadouts.
+    /// The list of all configured loadouts.
     /// </summary>
     [Config("loadouts", "loadouts", "The list of loadouts")]
     public static List<LoadoutDefinition> Loadouts = new()
@@ -146,12 +147,51 @@ public static class LoadoutManager
     }
 
     /// <summary>
+    /// Attempts to find a loadout whose name starts with the specified prefix.
+    /// </summary>
+    /// <param name="prefix">The prefix to match.</param>
+    /// <param name="definition">The found loadout.</param>
+    /// <returns>true if a matching loadout was found; otherwise, false.</returns>
+    public static bool TryGetPrefixed(string prefix, out LoadoutDefinition definition)
+    {
+        definition = null!;
+
+        if (string.IsNullOrWhiteSpace(prefix))
+            return false;
+
+        return Loadouts.TryGetFirst(x => x.Name.StartsWith(prefix), out definition);
+    }
+
+    /// <summary>
+    /// Attempts to pick a loadout whose name starts with the specified prefix, using the supplied weight picker.
+    /// </summary>
+    /// <param name="prefix">The prefix to match.</param>
+    /// <param name="weightPicker">Returns the selection weight for each matching loadout.</param>
+    /// <param name="definition">The selected loadout.</param>
+    /// <returns><see langword="true"/> if a matching loadout was selected; otherwise, <see langword="false"/>.</returns>
+    public static bool TryPickPrefixed(string prefix, Func<LoadoutDefinition, float> weightPicker, out LoadoutDefinition definition)
+    {
+        definition = null!;
+
+        if (string.IsNullOrWhiteSpace(prefix))
+            return false;
+
+        var candidates = Loadouts.Where(x => x.Name.StartsWith(prefix)).ToList();
+
+        if (candidates.Count == 0)
+            return false;
+
+        definition = candidates.GetRandomWeighted(weightPicker);
+        return definition != null;
+    }
+    
+    /// <summary>
     /// Attempts to apply a loadout.
     /// </summary>
     /// <param name="player">The player to apply the loadout to.</param>
     /// <param name="loadoutName">The name of the loadout.</param>
     /// <param name="itemProcessor">The delegate used to handle added vanilla items.</param>
-    /// <returns>true if the loadout was applied</returns>
+    /// <returns>true if the loadout was applied; otherwise, false.</returns>
     public static bool TryApply(ExPlayer player, string loadoutName, Action<LoadoutItem, ItemBase>? itemProcessor = null)
     {
         if (player?.ReferenceHub == null)
