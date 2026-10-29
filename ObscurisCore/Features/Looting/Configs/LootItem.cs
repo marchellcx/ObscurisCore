@@ -1,4 +1,5 @@
-﻿using LabExtended.API.Custom.Items;
+﻿using InventorySystem.Items.Usables.Scp330;
+using LabExtended.API.Custom.Items;
 using LabExtended.Core;
 using LabExtended.Extensions;
 using ObscurisCore.Extensions;
@@ -21,6 +22,11 @@ public struct LootItem
     /// Whether the item is an item or not.
     /// </summary>
     public readonly bool IsItem;
+
+    /// <summary>
+    /// Whether the item is a candy or not.
+    /// </summary>
+    public readonly bool IsCandy;
 
     /// <summary>
     /// Whether the item is an action or not.
@@ -71,6 +77,11 @@ public struct LootItem
     /// The type of the item.
     /// </summary>
     public readonly ItemType Type;
+
+    /// <summary>
+    /// Specifies the type of candy associated with the loot item.
+    /// </summary>
+    public readonly CandyKindID CandyType;
     
     /// <summary>
     /// The action of the item.
@@ -90,11 +101,12 @@ public struct LootItem
     /// <summary>
     /// Creates a new instance of the LootItem struct.
     /// </summary>
-    public LootItem(bool isAmmo, bool isItem, bool isAction, bool isCustomItem, bool spawnOnGround, bool usePlayerVelocity, float fuseTime, float throwForce,
-        Vector3 scale, Vector3 velocity, int amount, ItemType type, LootFunction? func, CustomItem? customItem, string[]? args)
+    public LootItem(bool isAmmo, bool isItem, bool isCandy, bool isAction, bool isCustomItem, bool spawnOnGround, bool usePlayerVelocity, float fuseTime, float throwForce,
+        Vector3 scale, Vector3 velocity, int amount, ItemType type, CandyKindID candyType, LootFunction? func, CustomItem? customItem, string[]? args)
     {
         IsAmmo = isAmmo;
         IsItem = isItem;
+        IsCandy = isCandy;
         IsAction = isAction;
         IsCustomItem = isCustomItem;
         SpawnOnGround = spawnOnGround;
@@ -105,6 +117,7 @@ public struct LootItem
         Velocity = velocity;
         Amount = amount;
         Type = type;
+        CandyType = candyType;
         Function = func;
         CustomItem = customItem;
         Args = args;
@@ -159,6 +172,7 @@ public struct LootItem
                     true,
                     false,
                     false,
+                    false,
                     spawnOnGround,
                     usePlayerVelocity,
                     fuseTime,
@@ -167,6 +181,31 @@ public struct LootItem
                     velocity,
                     amount,
                     type,
+                    CandyKindID.None,
+                    null,
+                    null,
+                    null));
+            }
+            else if (Enum.TryParse(splits[0], true, out CandyKindID candyType))
+            {
+                if (splits.Length < 2 || !int.TryParse(splits[1], out var amount))
+                    amount = 1;
+                
+                items.Add(new(
+                    false,
+                    true,
+                    true,
+                    false,
+                    false,
+                    false,
+                    false,
+                    0f,
+                    0f,
+                    Vector3.zero,
+                    Vector3.zero,
+                    amount,
+                    ItemType.None,
+                    candyType,
                     null,
                     null,
                     null));
@@ -186,6 +225,7 @@ public struct LootItem
                     false,
                     false,
                     false,
+                    false,
                     true,
                     spawnOnGround,
                     false,
@@ -195,6 +235,7 @@ public struct LootItem
                     Vector3.one,
                     amount,
                     ItemType.None,
+                    CandyKindID.None,
                     null,
                     customItem,
                     null));
@@ -215,6 +256,7 @@ public struct LootItem
                 items.Add(new(
                     false,
                     false,
+                    false,
                     true,
                     false,
                     false,
@@ -225,6 +267,7 @@ public struct LootItem
                     Vector3.one,
                     amount,
                     ItemType.None,
+                    CandyKindID.None,
                     action,
                     null,
                     args));

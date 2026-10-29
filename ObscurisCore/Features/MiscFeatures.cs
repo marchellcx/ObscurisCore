@@ -28,7 +28,7 @@ using PlayerRoles.PlayableScps.Scp3114;
 using Respawning;
 
 using System.Text;
-
+using MEC;
 using UnityEngine;
 
 namespace ObscurisCore.Features;
@@ -67,6 +67,9 @@ public static class MiscFeatures
     [Config("misc-features", "kill-feed-blacklist", "Specifies the roles that will not receive kill feed notifications.")]
     public static RoleTypeId[] KillFeedBlacklist { get; set; } = [];
 
+    /// <summary>
+    /// Determines whether health information is displayed in the player info panel.
+    /// </summary>
     [Config("misc-features", "player-info-health-display", "Enables or disables the display of health information in the player info.")]
     public static bool PlayerInfoHealthDisplay { get; set; } = true;
 
@@ -349,13 +352,16 @@ public static class MiscFeatures
             player.SendConsoleMessage($"Updated alternative nick to: {nick}");
         }
 
-        if (player.RemoteAdminAccess
-            && persistentOverwatch.TryGetStorageValue<bool>(player.UserId, out var storageValue)
-            && storageValue.Value)
+        Timing.CallDelayed(2f, () =>
         {
-            player.IsInOverwatch = true;
-            player.SendConsoleMessage("Persistent Overwatch enabled for this session.");
-        }
+            if (PersistentOverwatchEnabled && player.RemoteAdminAccess
+                                           && persistentOverwatch.TryGetStorageValue<bool>(player.UserId, out var storageValue)
+                                           && storageValue.Value)
+            {
+                player.IsInOverwatch = true;
+                player.SendConsoleMessage("Persistent Overwatch enabled for this session.");
+            }
+        });
     }
 
     private static void Initialize()

@@ -91,8 +91,6 @@ public class ScpVoiceAbility : CustomAbility
         {
             Profile = Player.Voice.AddProfile<ScpVoiceProfile>(true);
             Profile.Ability = this;
-
-            ApiLog.Debug($"Player {Player.ToLogString()} enabled SCP voice ability");
         }
     }
 
@@ -105,9 +103,8 @@ public class ScpVoiceAbility : CustomAbility
         base.OnDisabled();
 
         Player.Voice?.RemoveProfile<ScpVoiceProfile>();
-        Profile = null!;
         
-        ApiLog.Debug($"Player {Player.ToLogString()} disabled SCP voice ability");
+        Profile = null!;
     }
 
     /// <summary>
@@ -133,8 +130,6 @@ public class ScpVoiceAbility : CustomAbility
                 Mode = ScpVoiceStatus.Scp;
                 break;
         }
-        
-        ApiLog.Debug($"Player {Player.ToLogString()} changed SCP voice mode to &3{Mode}&r");
     }
 
     /// <summary>

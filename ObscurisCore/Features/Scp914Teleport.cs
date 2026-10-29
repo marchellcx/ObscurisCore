@@ -161,8 +161,7 @@ public static class Scp914Teleport
 
         Clips ??= new(ClipsConfig, Vector3.zero);
 
-        if (ScpChance > 0f &&
-            WeightUtils.GetBool(ScpChance))
+        if (ScpChance > 0f && WeightUtils.GetBool(ScpChance))
         {
             var randomScp = ExPlayer.Players
                 .Where(p => p?.ReferenceHub != null && p.Role.Team == Team.SCPs)

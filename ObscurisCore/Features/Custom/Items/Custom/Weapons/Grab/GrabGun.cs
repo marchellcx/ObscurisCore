@@ -179,15 +179,12 @@ namespace ObscurisCore.Features.Custom.Items.Custom.Weapons.Grab
                     }
                 }
 
-                if (args.Player.TryCast(50f, 0f, PickupLayerMask, out var hit))
+                if (args.Player.TryRayCastPickup(null, null, out var p))
                 {
-                    if (hit.collider.gameObject.TryFindComponent<ItemPickupBase>(out var pickup))
-                    {
-                        grabHandler.GrabPickup(pickup);
+                    grabHandler.GrabPickup(p);
 
-                        args.Player.SendConsoleMessage($"[GRAB] Grabbed pickup {pickup.Info.ItemId} via additional cast", "green");
-                        return;
-                    }
+                    args.Player.SendConsoleMessage($"[GRAB] Grabbed pickup {p.Info.ItemId} via additional cast", "green");
+                    return;
                 }
 
                 args.Player.SendConsoleMessage("[GRAB] Could not grab any supported objects", "red");

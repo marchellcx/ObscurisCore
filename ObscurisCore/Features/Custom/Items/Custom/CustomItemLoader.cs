@@ -19,10 +19,7 @@ public static class CustomItemLoader
         {
             if (type.IsAbstract || type.IsInterface)
                 continue;
-            
-            if (string.IsNullOrEmpty(type.Namespace) || !type.Namespace.StartsWith("ObscurisCore.Features.Items.Custom"))
-                continue;
-            
+
             if (type.HasAttribute<LoaderIgnoreAttribute>())
                 continue;
             

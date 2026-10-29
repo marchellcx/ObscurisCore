@@ -1,13 +1,22 @@
-﻿using Interactables.Interobjects.DoorUtils;
+﻿using Interactables.Interobjects.DoorButtons;
+using Interactables.Interobjects.DoorUtils;
 
 using InventorySystem.Items.Pickups;
 
 using LabExtended.API;
 using LabExtended.Extensions;
+
+using LabExtended.Events;
+using LabExtended.Events.Player;
+
 using LabExtended.Utilities.Update;
 
-using NiveraAPI.IO.Configs;
+using MEC;
 
+using NiveraAPI.IO.Configs;
+using NiveraAPI.Pooling;
+
+using ObscurisCore.Features.Rays.Enums;
 using ObscurisCore.Features.Rays.Objects;
 
 using UnityEngine;
@@ -22,13 +31,18 @@ public static class RayManager
 {
     private static int layerMask;
     private static int remainingFrames;
+    
+    private static RaycastHit[] frameBuffer;
+    
+    private static FixedArrayPool<RaycastHit> bufferPool;
 
-    private static PlayerUpdateComponent component = PlayerUpdateComponent.Create();
+    internal static List<RayObject> allObjects = new();
+    internal static PlayerUpdateComponent component = PlayerUpdateComponent.Create();
 
     /// <summary>
     /// Occurs when a hit is successfully detected by an ExPlayer during a raycast operation.
     /// </summary>
-    public static event Action<ExPlayer, RaycastHit> HitSuccess;
+    public static event Action<ExPlayer, RaycastHit>? HitSuccess;
 
     /// <summary>
     /// Event triggered after all raycast operations and associated logic are completed for the current frame.
@@ -39,31 +53,36 @@ public static class RayManager
     /// Determines the number of frames to skip between consecutive raycast operations in the RayManager.
     /// A value of -1 disables frame skipping, making raycasts occur every frame.
     /// </summary>
-    [Config("rayManager", "frameSkip",
-        "Number of frames to skip between raycast operations. Set to -1 to disable frame skipping.")]
-    public static int FrameSkip { get; set; } = 2;
-
-    /// <summary>
-    /// Gets or sets the forward offset value used in raycast operations.
-    /// This offset determines how far forward from the source position the raycast begins.
-    /// Modifying this value can adjust the starting point of object detection relative to the raycast origin.
-    /// </summary>
-    [Config("rayManager", "forwardOffset", "Forward offset for raycast operations.")]
-    public static float ForwardOffset { get; set; } = 0.1f;
+    [Config("ray-manager", "frame-skip", "Number of frames to skip between raycast operations. Set to -1 to disable raycasts.")]
+    public static int FrameSkip = 2;
 
     /// <summary>
     /// Specifies the maximum distance for raycast operations performed by the RayManager.
     /// Objects beyond this distance will not be detected during raycast-driven interactions.
     /// </summary>
-    [Config("rayManager", "distance", "Maximum distance to check for collisions.")]
-    public static float MaxDistance { get; set; } = 100f;
+    [Config("ray-manager", "distance", "Maximum distance to check for collisions.")]
+    public static float MaxDistance = 100f;
+
+    /// <summary>
+    /// Specifies the maximum number of collision results to return during raycast operations conducted by the RayManager.
+    /// </summary>
+    [Config("ray-manager", "max-hits", "Maximum number of hits to return from raycast operations.")]
+    public static int MaxHits = 10;
+
+    /// <summary>
+    /// Indicates whether raycast operations should consider all layers in the scene.
+    /// If set to <c>true</c>, all layers are included regardless of specific layer configuration.
+    /// If set to <c>false</c>, raycast operations will use only the specified layers.
+    /// </summary>
+    [Config("ray-manager", "use-all-layers", "Whether to use all layers for raycast operations.")]
+    public static bool UseAllLayers = true;
 
     /// <summary>
     /// Represents the collection of layer names or identifiers used for filtering raycast operations.
     /// These layers determine which objects are considered during collision checks performed by the raycasting system.
     /// </summary>
-    [Config("rayManager", "layers", "Layers to include in raycast operations.")]
-    public static string[] Layers { get; set; } =
+    [Config("ray-manager", "layers", "Layers to include in raycast operations.")]
+    public static string[] Layers =
     [
         "Default",
         "TransparentFX",
@@ -71,6 +90,11 @@ public static class RayManager
         "Water",
         "UI"
     ];
+
+    /// <summary>
+    /// Provides a read-only list of all currently registered RayObject instances managed by the RayManager.
+    /// </summary>
+    public static IReadOnlyList<RayObject> AllObjects => allObjects;
 
     /// <summary>
     /// Attempts to find an item pickup within a specified distance from the player and returns whether a pickup was
@@ -83,15 +107,8 @@ public static class RayManager
     /// <param name="pickup">When this method returns, contains the found item pickup if one is located within the specified distance;
     /// otherwise, null.</param>
     /// <returns>true if an item pickup is found within the specified distance; otherwise, false.</returns>
-    public static bool TryGetPickup(this ExPlayer source, float distance, int? mask, out ItemPickupBase? pickup)
-    {
-        pickup = null;
-
-        if (!TryCast(source, distance, ForwardOffset, mask ?? layerMask, out var hit))
-            return false;
-
-        return hit.collider.gameObject.TryFindComponent<ItemPickupBase>(out pickup);
-    }
+    public static bool TryRayCastPickup(this ExPlayer source, float? distance, int? mask, out ItemPickupBase? pickup)
+        => source.TryRayCastComponent<ItemPickupBase>(distance, mask, null, null, out pickup);
 
     /// <summary>
     /// Attempts to find a door within the specified distance from the player and returns information about the door
@@ -104,14 +121,17 @@ public static class RayManager
     /// <param name="target">When this method returns, contains the found door variant if a door is detected within the specified
     /// distance; otherwise, null.</param>
     /// <returns>true if a door is found within the specified distance; otherwise, false.</returns>
-    public static bool TryGetDoor(this ExPlayer source, float distance, int? mask, out DoorVariant? target)
+    public static bool TryRayCastDoor(this ExPlayer source, float? distance, int? mask, out DoorVariant? target)
     {
-        target = null;
-
-        if (!TryCast(source, distance, ForwardOffset, mask ?? layerMask, out var hit))
-            return false;
-
-        return hit.collider.gameObject.TryFindComponent<DoorVariant>(out target);
+        DoorVariant? ButtonSelector(RaycastHit hit)
+        {
+            if (hit.collider.gameObject.TryFindComponent<BasicDoorButton>(out var button) && button.ParentDoor != null)
+                return button.ParentDoor;
+            
+            return null;
+        }
+        
+        return source.TryRayCastComponent<DoorVariant>(distance, mask, null, ButtonSelector, out target);
     }
 
     /// <summary>
@@ -125,60 +145,243 @@ public static class RayManager
     /// <param name="target">When this method returns, contains the found player if one is detected within the specified distance and
     /// mask; otherwise, null.</param>
     /// <returns>true if a target player is found within the specified distance and mask; otherwise, false.</returns>
-    public static bool TryGetPlayer(this ExPlayer source, float distance, int? mask, out ExPlayer? target)
+    public static bool TryRayCastPlayer(this ExPlayer source, float? distance, int? mask, out ExPlayer? target)
     {
         target = null;
 
-        if (!TryCast(source, distance, ForwardOffset, mask ?? layerMask, out var hit))
+        if (!source.TryRayCastComponent<ReferenceHub>(distance, mask, null, null, out var referenceHub))
             return false;
 
-        if (!hit.collider.gameObject.TryFindComponent<ReferenceHub>(out var hub))
-            return false;
-
-        return ExPlayer.TryGet(hub, out target);
+        return ExPlayer.TryGet(referenceHub, out target);
     }
 
     /// <summary>
-    /// Attempts to perform a raycast from the player's camera position in the forward direction, optionally
-    /// offsetting the direction, and returns whether a collider was hit.
+    /// Attempts to perform a raycast operation from the player's position in the direction of the player's camera,
+    /// and determines if a component of the specified type is found. If found, returns the associated component.
     /// </summary>
-    /// <remarks>The method modifies the ray direction by the specified forward offset before
-    /// performing the raycast. The hit information is only valid if the method returns true.</remarks>
-    /// <param name="player">The player from whose camera position and orientation the raycast is performed.</param>
-    /// <param name="distance">The maximum distance, in world units, that the ray should check for collisions.</param>
-    /// <param name="forwardOffset">The amount by which to offset the ray's forward direction along each axis before casting. Must be zero or
-    /// positive.</param>
-    /// <param name="layerMask">A bitmask that specifies which layers to include in the raycast collision check.</param>
-    /// <param name="hit">When this method returns, contains information about the raycast hit if a collider was detected; otherwise,
-    /// contains default values.</param>
-    /// <returns>true if the raycast hit a collider; otherwise, false.</returns>
-    public static bool TryCast(this ExPlayer player, float distance, float forwardOffset, int layerMask,
-        out RaycastHit hit)
+    /// <typeparam name="T">The type of the component to search for during the raycast.</typeparam>
+    /// <param name="player">The player whose position and camera direction are used to perform the raycast.</param>
+    /// <param name="distance">The maximum distance to perform the raycast. If null, a default maximum distance is used.</param>
+    /// <param name="mask">An optional layer mask specifying which layers should be included in the raycast. If null, a default mask is used.</param>
+    /// <param name="predicate">An optional predicate to filter the raycast results by custom criteria. If null, no additional filtering is done.</param>
+    /// <param name="componentSelector">A function that extracts the desired component from a raycast hit, if one exists.</param>
+    /// <param name="component">When this method returns, contains the found component of type <typeparamref name="T"/> if a match is located; otherwise, the default value for the specified type.</param>
+    /// <returns>true if a component of type <typeparamref name="T"/> is found that matches the filtering criteria; otherwise, false.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if the <paramref name="player"/> is null or does not have a valid reference hub.</exception>
+    public static bool TryRayCastComponent<T>(this ExPlayer player, float? distance, int? mask, Predicate<RaycastHit>? predicate, Func<RaycastHit, T?>? componentSelector, out T component)
     {
+        var buffer = bufferPool.Rent();
+
+        try
+        {
+            var result = player.TryRayCastComponent(buffer, distance, mask, predicate, componentSelector, out _, out _, out component);
+
+            bufferPool.Return(buffer);
+            return result;
+        }
+        finally
+        {
+            bufferPool.Return(buffer);
+        }
+    }
+
+    /// <summary>
+    /// Attempts to perform a raycast operation from the player's position in the direction of the player's camera,
+    /// and determines if a component of the specified type is found. If found, returns the associated component.
+    /// </summary>
+    /// <typeparam name="T">The type of the component to search for during the raycast.</typeparam>
+    /// <param name="player">The player whose position and camera direction are used to perform the raycast.</param>
+    /// <param name="buffer">The buffer to use for storing the raycast results.</param>
+    /// <param name="distance">The maximum distance to perform the raycast. If null, a default maximum distance is used.</param>
+    /// <param name="mask">An optional layer mask specifying which layers should be included in the raycast. If null, a default mask is used.</param>
+    /// <param name="predicate">An optional predicate to filter the raycast results by custom criteria. If null, no additional filtering is done.</param>
+    /// <param name="componentSelector">A function that extracts the desired component from a raycast hit, if one exists.</param>
+    /// <param name="count">The amount of successful raycast hits.</param>
+    /// <param name="index">When this method returns, contains the index of the found component of type <typeparamref name="T"/> if a match is located; otherwise, -1.</param>
+    /// <param name="component">When this method returns, contains the found component of type <typeparamref name="T"/> if a match is located; otherwise, the default value for the specified type.</param>
+    /// <returns>true if a component of type <typeparamref name="T"/> is found that matches the filtering criteria; otherwise, false.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if the <paramref name="player"/> is null or does not have a valid reference hub.</exception>
+    public static bool TryRayCastComponent<T>(this ExPlayer player, RaycastHit[] buffer, float? distance, int? mask, Predicate<RaycastHit>? predicate, Func<RaycastHit, T?>? componentSelector, out int count, out int index, out T component)
+    {
+        if (buffer == null)
+            throw new ArgumentNullException(nameof(buffer));
+
+        if (player?.ReferenceHub == null)
+            throw new ArgumentNullException(nameof(player));
+
+        index = -1;
+        component = default!;
+
+        var isHub = typeof(T) == typeof(ReferenceHub);
+
+        var position = player.Position.Position;
+        var direction = player.CameraTransform.forward;
+        
+        count = Physics.RaycastNonAlloc(position, direction, buffer, distance ?? MaxDistance, mask ?? layerMask);
+        
+        if (count < 1)
+        {
+            return false;
+        }
+
+        for (var x = 0; x < count; x++)
+        {
+            var raycast = buffer[x];
+
+            if (raycast.collider == null)
+            {
+                continue;
+            }
+
+            if (predicate != null && !predicate(raycast))
+            {
+                continue;
+            }
+
+            if (raycast.collider.gameObject.TryFindComponent<ReferenceHub>(out var hub))
+            {
+                if (isHub && hub != player.ReferenceHub)
+                {
+                    component = (T)(object)hub; // kinda ugly but whatevs
+
+                    index = x;
+                    return true;
+                }
+
+                if (hub == player.ReferenceHub)
+                {
+                    continue;
+                }
+            }
+
+            if (raycast.collider.gameObject.TryFindComponent<HitboxIdentity>(out var hitboxIdentity) && hitboxIdentity.TargetHub != null)
+            {
+                if (isHub && hitboxIdentity.TargetHub != player.ReferenceHub)
+                {
+                    component = (T)(object)hitboxIdentity.TargetHub;
+
+                    index = x;
+                    return true;
+                }
+
+                if (hitboxIdentity.TargetHub == player.ReferenceHub)
+                {
+                    component = (T)(object)hitboxIdentity.TargetHub;
+
+                    index = x;
+                    return true;
+                }
+
+                if (hitboxIdentity.TargetHub == player.ReferenceHub)
+                {
+                    continue;
+                }
+            }
+
+            if (componentSelector != null)
+            {
+                component = componentSelector(raycast)!;
+
+                if (component != null)
+                {
+                    index = x;
+                    return true;
+                }
+
+                continue;
+            }
+
+            if (!raycast.collider.gameObject.TryFindComponent(out component))
+            {
+                continue;
+            }
+            
+            index = x;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Attempts to cast a ray from the player's position in the direction they are facing, within a specified distance,
+    /// and determines if a hit occurs that satisfies an optional conditional predicate.
+    /// </summary>
+    /// <param name="player">The player initiating the raycast.</param>
+    /// <param name="distance">The maximum distance the raycast can travel.</param>
+    /// <param name="layerMask">An optional layer mask used to filter objects for the raycast. If null, a default mask is used.</param>
+    /// <param name="predicate">An optional condition that the hit must satisfy. If null, all hits will be considered valid.</param>
+    /// <param name="hit">When this method returns, contains the RaycastHit data if a successful hit occurs; otherwise, default.</param>
+    /// <returns>true if a valid hit is detected based on the provided parameters; otherwise, false.</returns>
+    public static bool TryRayCast(this ExPlayer player, float? distance, int? layerMask, Predicate<RaycastHit>? predicate, out int count, out RaycastHit hit)
+    {
+        var buffer = bufferPool.Rent();
+
+        try
+        {
+            var result = player.TryRayCast(buffer, distance, layerMask, predicate, out count, out hit);
+            return result;
+        }
+        finally
+        {
+            bufferPool.Return(buffer);
+        }
+    }
+
+    /// <summary>
+    /// Attempts to cast a ray from the player's position in the direction they are facing, within a specified distance,
+    /// and determines if a hit occurs that satisfies an optional conditional predicate.
+    /// </summary>
+    /// <param name="player">The player initiating the raycast.</param>
+    /// <param name="buffer">The buffer to store the hits in.</param>
+    /// <param name="distance">The maximum distance the raycast can travel.</param>
+    /// <param name="layerMask">An optional layer mask used to filter objects for the raycast. If null, a default mask is used.</param>
+    /// <param name="predicate">An optional condition that the hit must satisfy. If null, all hits will be considered valid.</param>
+    /// <param name="count">When this method returns, contains the number of hits detected.</param>
+    /// <param name="hit">When this method returns, contains the RaycastHit data if a successful hit occurs; otherwise, default.</param>
+    /// <returns>true if a valid hit is detected based on the provided parameters; otherwise, false.</returns>
+    public static bool TryRayCast(this ExPlayer player, RaycastHit[] buffer, float? distance, int? layerMask, Predicate<RaycastHit>? predicate, out int count, out RaycastHit hit)
+    {
+        if (player?.ReferenceHub == null)
+            throw new ArgumentNullException(nameof(player));
+        
+        if (buffer == null)
+            throw new ArgumentNullException(nameof(buffer));
+        
         hit = default;
 
         var position = player.Position.Position;
         var direction = player.CameraTransform.forward;
 
-        if (forwardOffset > 0f)
+        count = Physics.RaycastNonAlloc(position, direction, buffer, distance ?? MaxDistance, layerMask ?? RayManager.layerMask);
+
+        if (count < 1)
+            return false;
+        
+        for (var x = 0; x < count; x++)
         {
-            if (direction.x > 0f)
-                direction.x += forwardOffset;
+            var raycast = buffer[x];
 
-            if (direction.y > 0f)
-                direction.y += forwardOffset;
+            if (raycast.collider == null)
+                continue;
 
-            if (direction.z > 0f)
-                direction.z += forwardOffset;
+            if (predicate != null && !predicate(raycast))
+                continue;
+
+            if (raycast.collider.gameObject.TryFindComponent<ReferenceHub>(out var hub)
+                && hub == player.ReferenceHub)
+                continue;
+
+            if (raycast.collider.gameObject.TryFindComponent<HitboxIdentity>(out var hitboxIdentity)
+                && hitboxIdentity.TargetHub != null
+                && hitboxIdentity.TargetHub == player.ReferenceHub)
+                continue;
+
+            hit = raycast;
+            return true;
         }
 
-        if (!Physics.Raycast(position, direction, out hit, distance, layerMask))
-            return false;
-
-        if (hit.collider == null)
-            return false;
-
-        return true;
+        return false;
     }
 
     /// <summary>
@@ -196,6 +399,11 @@ public static class RayManager
 
         if (rayObject is null)
             throw new ArgumentNullException(nameof(rayObject));
+
+        var layer = 1 << gameObject.layer;
+        
+        if (!UseAllLayers)
+            layerMask |= layer;
 
         if (gameObject.TryGetComponent<RayComponent>(out var rayComponent))
         {
@@ -233,6 +441,32 @@ public static class RayManager
         return true;
     }
 
+    private static void OnShooting(PlayerShootingFirearmEventArgs args)
+    {
+        if (args.Hit.collider != null)
+        {
+            if (args.Hit.collider.TryGetComponent<RayComponent>(out var rayComponent)
+                || args.Hit.collider.gameObject.TryFindComponent<RayComponent>(out rayComponent))
+            {
+                rayComponent.CallHit(args.Player, ObjectHitSource.Firearm, args.TargetDamage);
+                return;
+            }
+        }
+        
+        foreach (var hit in args.Hitscan.Obstacles)
+        {
+            if (hit.Hit.collider != null)
+            {
+                if (hit.Hit.collider.TryGetComponent<RayComponent>(out var rayComponent)
+                    || hit.Hit.collider.gameObject.TryFindComponent<RayComponent>(out rayComponent))
+                {
+                    rayComponent.CallHit(args.Player, ObjectHitSource.Firearm, args.TargetDamage);
+                    return;
+                }
+            }
+        }
+    }
+
     private static void OnUpdate()
     {
         if (ExPlayer.Count < 1)
@@ -256,27 +490,75 @@ public static class RayManager
             if (player?.ReferenceHub == null || !player.IsAlive)
                 continue;
 
-            if (!TryCast(player, MaxDistance, ForwardOffset, layerMask, out var hit))
+            if (!player.TryRayCast(frameBuffer, null, null, null, out var count, out _))
+                continue;
+            
+            if (count < 1)
                 continue;
 
-            HitSuccess?.InvokeSafe(player, hit);
+            for (var x = 0; x < count; x++)
+            {
+                var hit = frameBuffer[x];
 
-            if (!hit.collider.gameObject.TryFindComponent<RayComponent>(out var component))
-                continue;
+                if (hit.collider != null)
+                {
+                    HitSuccess?.InvokeSafe(player, hit);
 
-            component.OnHit(player);
+                    if (hit.collider.gameObject.TryFindComponent<RayComponent>(out var rayComponent))
+                    {
+                        rayComponent.OnHit(player);
+                    }
+                }
+            }
         }
 
         FrameFinished?.InvokeSafe();
     }
 
+    private static void OnJoined(ExPlayer player)
+    {
+        Timing.CallDelayed(0.2f, () =>
+        {
+            allObjects.ForEach(obj =>
+            {
+                obj.UpdateBehaviourVisibility(player);
+            });
+        });
+    }
+
+    private static void OnRestarting()
+    {
+        var components = UnityEngine.Object.FindObjectsByType<RayComponent>(FindObjectsSortMode.None);
+
+        foreach (var component in components)
+        {
+            if (component != null)
+            {
+                UnityEngine.Object.Destroy(component);
+            }
+        }
+        
+        allObjects.Clear();
+        
+        layerMask = LayerMask.GetMask(Layers);
+    }
+
     private static void Initialize()
     {
-        if (FrameSkip == -1)
-            return;
+        ExPlayerEvents.Joined += OnJoined;
+        ExPlayerEvents.ShootingFirearm += OnShooting;
+        
+        ExRoundEvents.Restarting += OnRestarting;
 
-        layerMask = LayerMask.GetMask(Layers);
-
-        component.OnLateUpdate += OnUpdate;
+        if (UseAllLayers)
+            layerMask = Physics.AllLayers;
+        else
+            layerMask = LayerMask.GetMask(Layers);
+        
+        frameBuffer = new RaycastHit[MaxHits];
+        bufferPool = new FixedArrayPool<RaycastHit>(MaxHits, 10);
+        
+        if (FrameSkip != -1)
+            component.OnLateUpdate += OnUpdate;
     }
 }

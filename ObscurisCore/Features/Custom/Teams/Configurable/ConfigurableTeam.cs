@@ -22,6 +22,7 @@ using ObscurisCore.Extensions;
 using MEC;
 
 using LabApi.Events.Handlers;
+using LabApi.Features.Wrappers;
 
 namespace ObscurisCore.Features.Custom.Teams.Configurable;
 
@@ -192,62 +193,80 @@ public class ConfigurableTeam : CustomTeamHandler<ConfigurableTeamWave>
 
     private void OnWaveRespawning(WaveRespawningEventArgs args)
     {
-        if (!ReplacedFaction.HasValue)
-            return;
-
-        if (args.Wave.Faction != ReplacedFaction.Value)
-            return;
-
-        if (ReplacementChance <= 0f)
-            return;
-
-        if (ReplacementChance < 100f && !WeightUtils.GetBool(ReplacementChance))
-            return;
-
-        args.IsAllowed = false;
-
-        var list = new List<ExPlayer>();
-
-        foreach (var ply in args.SpawningPlayers)
+        try
         {
-            if (!ply.CastPlayer(out var exPlayer))
-                continue;
-
-            list.Add(exPlayer);
-        }
-
-        args.Wave.PlayRespawnEffect();
-
-        Timing.CallDelayed(args.Wave.AnimationTime, () => 
-        {
-            list.RemoveAll(p => !p.IsValidPlayer());
-
-            if (list.Count < 1)
-            {
-                ApiLog.Warn("No valid players to spawn.");
+            if (!ReplacedFaction.HasValue)
                 return;
-            }
 
-            var wave = Spawn(list);
+            if (args.Wave.Faction != ReplacedFaction.Value)
+                return;
 
-            if (wave.SpawnedWave != null)
+            if (ReplacementChance <= 0f)
+                return;
+
+            if (ReplacementChance < 100f && !WeightUtils.GetBool(ReplacementChance))
+                return;
+
+            var list = new List<ExPlayer>();
+
+            foreach (var ply in args.SpawningPlayers)
             {
-                if (ReplacementUseCassie)
-                {
-                    args.Wave.PlayAnnouncement();
-                }
-                else if (CassieAnnouncements.Count > 0)
-                {
-                    var announcement = CassieAnnouncements.RandomItem();
+                if (!ply.CastPlayer(out var exPlayer))
+                    continue;
 
-                    LabApi.Features.Wrappers.Cassie.Message(announcement);
-                }
+                list.Add(exPlayer);
             }
-            else
+
+            if (list.Count > 0)
             {
-                ApiLog.Warn($"Failed to spawn replacement wave: &1{wave.SpawnFail}&r.");
+                args.Wave.PlayRespawnEffect();
+                args.IsAllowed = false;
+
+                Timing.CallDelayed(args.Wave.AnimationTime, () =>
+                {
+                    list.RemoveAll(p => !p.IsValidPlayer());
+
+                    if (list.Count < 1)
+                    {
+                        args.Wave.InitiateRespawn();
+                        
+                        ApiLog.Warn("No valid players to spawn, respawning original team.");
+                        return;
+                    }
+
+                    var wave = Spawn(list);
+
+                    if (wave.SpawnedWave != null)
+                    {
+                        if (ReplacementUseCassie)
+                        {
+                            args.Wave.PlayAnnouncement(list);
+                        }
+                        else if (CassieAnnouncements.Count > 0)
+                        {
+                            var announcement = CassieAnnouncements.RandomItem();
+
+                            if (!string.IsNullOrEmpty(announcement))
+                            {
+                                Announcer.Message(announcement, string.Empty);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        args.Wave.InitiateRespawn();
+                        
+                        ApiLog.Warn($"Failed to spawn replacement wave: &1{wave.SpawnFail}&r.");
+                    }
+                });
             }
-        });
+        }
+        catch (Exception ex)
+        {
+            ApiLog.Error($"Failed to spawn replacement wave:\n{ex}");
+            
+            args.IsAllowed = true;
+        }
     }
 
     private static void Initialize()

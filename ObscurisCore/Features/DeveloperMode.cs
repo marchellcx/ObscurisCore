@@ -146,7 +146,7 @@ public class DeveloperMode
             return;
 
         player.Kick(
-            "[PEANUT CLUB]\nServer je aktuálně v developer módu.\nPokud jste developer, ujistěte se, že máte správná oprávnění.\n\nVíce informací na našem Discordu.");
+            "[OBSCURIS CORE]\nServer je aktuálně v developer módu.\nPokud jste developer, ujistěte se, že máte správná oprávnění.\n\nVíce informací na našem Discordu.");
     }
 
     private static void OnVerified(ExPlayer player)

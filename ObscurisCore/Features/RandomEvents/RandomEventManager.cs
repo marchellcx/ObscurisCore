@@ -185,6 +185,7 @@ public static class RandomEventManager
         Events.Add(FileUtils.LoadYamlFileOrDefault(FileUtils.CreatePath(ObscurisPlugin.RootDirectory, "events", "blackout.yml"), new BlackoutEvent(), true));
         Events.Add(FileUtils.LoadYamlFileOrDefault(FileUtils.CreatePath(ObscurisPlugin.RootDirectory, "events", "downgrade.yml"), new DowngradeEvent(), true));
         Events.Add(FileUtils.LoadYamlFileOrDefault(FileUtils.CreatePath(ObscurisPlugin.RootDirectory, "events", "boss_fight.yml"), new BossFightEvent(), true));
+        Events.Add(FileUtils.LoadYamlFileOrDefault(FileUtils.CreatePath(ObscurisPlugin.RootDirectory, "events", "midas_touch.yml"), new MidasTouchEvent(), true));
         Events.Add(FileUtils.LoadYamlFileOrDefault(FileUtils.CreatePath(ObscurisPlugin.RootDirectory, "events", "random_size.yml"), new RandomSizeEvent(), true));
         Events.Add(FileUtils.LoadYamlFileOrDefault(FileUtils.CreatePath(ObscurisPlugin.RootDirectory, "events", "random_name.yml"), new RandomNameEvent(), true));
         Events.Add(FileUtils.LoadYamlFileOrDefault(FileUtils.CreatePath(ObscurisPlugin.RootDirectory, "events", "random_speed.yml"), new RandomSpeedEvent(), true));

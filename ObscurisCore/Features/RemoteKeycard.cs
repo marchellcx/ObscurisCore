@@ -18,7 +18,7 @@ using LabExtended.Events.Firearms;
 
 using MapGeneration;
 using MapGeneration.Distributors;
-
+using NiveraAPI.IO.Configs;
 using PlayerRoles;
 
 using ObscurisCore.Extensions;
@@ -37,6 +37,18 @@ namespace ObscurisCore.Features;
 public static class RemoteKeycard
 {
     private static LayerMask mask = LayerMask.GetMask("InteractableNoPlayerCollision");
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the Remote Keycard feature is enabled.
+    /// </summary>
+    [Config("remote-keycard", "enabled", "Whether or not Remote Keycard is enabled.")]
+    public static bool IsEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the Remote Keycard feature allows interaction with doors by shooting their buttons with firearms.
+    /// </summary>
+    [Config("remote-keycard", "firearms", "Whether or not Remote Keycard can work by shooting a door's button with a firearm.")]
+    public static bool FirearmsEnabled { get; set; } = true;
 
     /// <summary>
     /// Gets an array of all possible <see cref="DoorPermissionFlags"/> values.
@@ -66,7 +78,7 @@ public static class RemoteKeycard
         {
             var flag = AllFlags[x];
             
-            if (flag == DoorPermissionFlags.None || flag == DoorPermissionFlags.ScpOverride)
+            if (flag is DoorPermissionFlags.None or DoorPermissionFlags.ScpOverride)
                 continue;
             
             if (!requiredPerms.HasFlag(flag))
@@ -130,6 +142,9 @@ public static class RemoteKeycard
     
     private static void OnInteractingGenerator(PlayerInteractingGeneratorEventArgs args)
     {
+        if (!IsEnabled)
+            return;
+        
         if (args.Generator.IsUnlocked || args.ColliderId != Scp079Generator.GeneratorColliderId.Door)
             return;
         
@@ -147,6 +162,9 @@ public static class RemoteKeycard
 
     private static void OnInteractingDoor(PlayerInteractingDoorEventArgs args)
     {
+        if (!IsEnabled)
+            return;
+        
         if (args.CanOpen)
             return;
 
@@ -180,6 +198,9 @@ public static class RemoteKeycard
 
     private static void OnInteractingLocker(PlayerInteractingLockerEventArgs args)
     {
+        if (!IsEnabled)
+            return;
+
         if (args.CanOpen)
             return;
 
@@ -197,6 +218,9 @@ public static class RemoteKeycard
 
     private static void OnShot(FirearmRayCastEventArgs args)
     {
+        if (!FirearmsEnabled)
+            return;
+        
         if (args.Hit.HasValue && ProcessHit(args.Hit.Value, args.Player))
             return;
 
@@ -229,10 +253,7 @@ public static class RemoteKeycard
                 }
 
                 if (!panel.AssignedChamber.IsReadyForUserInput)
-                {
-                    ApiLog.Warn("RemoteKeycard", $"Elevator &1{panel.AssignedChamber.AssignedGroup}&r is not ready!");
                     return true;
-                }
 
                 var lockMode = DoorLockUtils.GetMode(panel.AssignedChamber.ActiveLocksAllDoors);
 

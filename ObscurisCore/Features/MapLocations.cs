@@ -184,6 +184,47 @@ public static class MapLocations
     }
 
     /// <summary>
+    /// Attempts to spawn an object at a map location whose name starts with the specified prefix
+    /// and matches the conditions of the given predicate.
+    /// </summary>
+    /// <param name="prefix">
+    /// The prefix used to search for map location names. Must not be null or empty.
+    /// </param>
+    /// <param name="predicate">
+    /// A function that evaluates each map location, returning <c>true</c> if the location satisfies
+    /// the desired conditions. The function receives the <see cref="LocationInfo"/> of the location,
+    /// its position as a <see cref="Vector3"/>, and its rotation as a <see cref="Quaternion"/>.
+    /// Must not be null.
+    /// </param>
+    /// <param name="spawnFunction">
+    /// An action invoked with the position and rotation of the found location for object spawning.
+    /// Must not be null.
+    /// </param>
+    /// <returns>
+    /// <c>true</c> if a matching location is found and the object is successfully spawned; otherwise, <c>false</c>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown if <paramref name="prefix"/>, <paramref name="predicate"/>, or <paramref name="spawnFunction"/> is null or empty.
+    /// </exception>
+    public static bool SpawnAtPrefixed(string prefix, Func<LocationInfo, Vector3, Quaternion, bool> predicate, Action<Vector3, Quaternion> spawnFunction)
+    {
+        if (string.IsNullOrEmpty(prefix))
+            throw new ArgumentNullException(nameof(prefix));
+
+        if (predicate == null)
+            throw new ArgumentNullException(nameof(predicate));
+        
+        if (spawnFunction == null)
+            throw new ArgumentNullException(nameof(spawnFunction));
+        
+        if (!TryFindPrefixed(prefix, predicate, out var position, out var rotation))
+            return false;
+        
+        spawnFunction(position, rotation);
+        return true;   
+    }
+
+    /// <summary>
     /// Spawns an object at the first map location whose name begins with the specified prefix using the provided spawn function.
     /// </summary>
     /// <param name="prefix">
@@ -211,6 +252,58 @@ public static class MapLocations
         
         spawnFunction(position, rotation);
         return true;   
+    }
+
+    /// <summary>
+    /// Attempts to locate a map location whose name starts with the specified prefix and satisfies a given predicate.
+    /// </summary>
+    /// <param name="prefix">
+    /// The prefix of the map location names to search for. Must not be null or empty.
+    /// </param>
+    /// <param name="predicate">
+    /// A function to evaluate each matching location. The function receives the location information, its position,
+    /// and its rotation as parameters. Must not be null.
+    /// </param>
+    /// <param name="position">
+    /// When this method returns, contains the position of the first matching location that satisfies the predicate,
+    /// if found; otherwise, contains the default value for <see cref="Vector3"/>.
+    /// </param>
+    /// <param name="rotation">
+    /// When this method returns, contains the rotation of the first matching location that satisfies the predicate,
+    /// if found; otherwise, contains the default value for <see cref="Quaternion"/>.
+    /// </param>
+    /// <returns>
+    /// <c>true</c> if a matching location is found; otherwise, <c>false</c>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown if <paramref name="prefix"/> is null or empty, or if <paramref name="predicate"/> is null.
+    /// </exception>
+    public static bool TryFindPrefixed(string prefix, Func<LocationInfo, Vector3, Quaternion, bool> predicate, out Vector3 position, out Quaternion rotation)
+    {
+        if (string.IsNullOrEmpty(prefix))
+            throw new ArgumentNullException(nameof(prefix));
+
+        if (predicate == null)
+            throw new ArgumentNullException(nameof(predicate));
+
+        position = default;
+        rotation = default;
+        
+        foreach (var kvp in Locations)
+        {
+            if (kvp.Key.StartsWith(prefix))
+            {
+                if (TryFind(kvp.Key, out position, out rotation) && predicate(kvp.Value, position, rotation))
+                {
+                    return true;
+                }
+            }
+        }
+
+        position = default;
+        rotation = default;
+
+        return false;
     }
 
     /// <summary>

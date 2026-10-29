@@ -5,8 +5,8 @@
         <LangVersion>preview</LangVersion>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <AssemblyVersion>2.1.0.0</AssemblyVersion>
-        <FileVersion>2.1.0.0</FileVersion>
+        <AssemblyVersion>2.2.0.0</AssemblyVersion>
+        <FileVersion>2.2.0.0</FileVersion>
         <NeutralLanguage>en-001</NeutralLanguage>
     </PropertyGroup>
 
@@ -42,7 +42,7 @@
         <HintPath>$(PLUGIN_REFS)\Mirror-Publicized.dll</HintPath>
       </Reference>
       <Reference Include="NiveraAPI">
-        <HintPath>$(PLUGIN_REFS)\NiveraAPI.dll</HintPath>
+        <HintPath>..\..\..\plugin_refs\NiveraAPI-publicized.dll</HintPath>
       </Reference>
       <Reference Include="NiveraAPI.ScpSl">
         <HintPath>$(PLUGIN_REFS)\NiveraAPI.ScpSl.dll</HintPath>
@@ -55,6 +55,9 @@
       </Reference>
       <Reference Include="ProjectMER">
         <HintPath>$(PLUGIN_REFS)\ProjectMER.dll</HintPath>
+      </Reference>
+      <Reference Include="PRTS">
+        <HintPath>..\..\..\plugin_refs\PRTS.dll</HintPath>
       </Reference>
       <Reference Include="Snake">
         <HintPath>$(PLUGIN_REFS)\Snake-Publicized.dll</HintPath>
@@ -79,6 +82,12 @@
       </Reference>
       <Reference Include="UnityEngine.UI">
         <HintPath>$(PLUGIN_REFS)\UnityEngine.UI.dll</HintPath>
+      </Reference>
+      <Reference Include="UnityEngine.UnityWebRequestModule">
+        <HintPath>..\..\..\plugin_refs\UnityEngine.UnityWebRequestModule.dll</HintPath>
+      </Reference>
+      <Reference Include="UnityEngine.UnityWebRequestWWWModule">
+        <HintPath>..\..\..\plugin_refs\UnityEngine.UnityWebRequestWWWModule.dll</HintPath>
       </Reference>
       <Reference Include="YamlDotNet">
         <HintPath>$(PLUGIN_REFS)\YamlDotNet.dll</HintPath>

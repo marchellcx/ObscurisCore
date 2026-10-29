@@ -19,6 +19,7 @@ using ObscurisCore.Extensions;
 using ObscurisCore.Features.SchematicModels.Configs;
 
 using UnityEngine;
+using UnityExtensions = ObscurisCore.Extensions.UnityExtensions;
 
 namespace ObscurisCore.Features.SchematicModels;
 
@@ -157,7 +158,7 @@ public static class SchematicModelReplacer
             return;
         }
 
-        if (args.Hit.collider.gameObject.TryFindComponent<SchematicObject>(out var schematicObject))
+        if (UnityExtensions.TryFindComponent<SchematicObject>(args.Hit.collider.gameObject, out var schematicObject))
         {
             ApiLog.Debug($"Found SchematicObject on &1{args.Hit.collider.gameObject.name}&r: {schematicObject.Name}");
 
@@ -175,7 +176,7 @@ public static class SchematicModelReplacer
             
             args.Player.SendHitMarker(1f);
         }
-        else if (args.Hit.collider.gameObject.TryFindComponent<NetworkIdentity>(out var identity))
+        else if (UnityExtensions.TryFindComponent<NetworkIdentity>(args.Hit.collider.gameObject, out var identity))
         {
             ApiLog.Debug($"Found NetworkIdentity on &1{args.Hit.collider.gameObject.name}&r: {identity.netId} {identity.name}");
             

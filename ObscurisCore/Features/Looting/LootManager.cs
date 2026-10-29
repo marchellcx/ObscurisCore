@@ -3,7 +3,7 @@
 using InventorySystem.Items;
 using InventorySystem.Items.Firearms.Ammo;
 using InventorySystem.Items.ThrowableProjectiles;
-
+using InventorySystem.Items.Usables.Scp330;
 using LabExtended.API;
 
 using LabExtended.Core;
@@ -12,6 +12,7 @@ using LabExtended.Extensions;
 
 using ObscurisCore.Extensions;
 using ObscurisCore.Features.Looting.Configs;
+using UnityEngine.Pool;
 
 namespace ObscurisCore.Features.Looting;
 
@@ -62,8 +63,7 @@ public static class LootManager
                 {
                     if (item.SpawnOnGround)
                     {
-                        var pickup =
-                            ExMap.SpawnItem<AmmoPickup>(item.Type, target.Position, item.Scale, target.Rotation);
+                        var pickup = ExMap.SpawnItem<AmmoPickup>(item.Type, target.Position, item.Scale, target.Rotation);
 
                         if (pickup != null)
                         {
@@ -81,12 +81,9 @@ public static class LootManager
                     {
                         if (item.SpawnOnGround || target.Inventory.ItemCount >= 8)
                         {
-                            if (item.FuseTime > 0f
-                                && item.Type.TryGetItemPrefab(out var prefab) && prefab is ThrowableItem)
+                            if (item.FuseTime > 0f && item.Type.TryGetItemPrefab(out var prefab) && prefab is ThrowableItem)
                             {
-                                ExMap.SpawnProjectile(item.Type, target.Position, item.Scale,
-                                    (item.UsePlayerVelocity ? target.Velocity : item.Velocity), target.Rotation,
-                                    item.ThrowForce, item.FuseTime);
+                                ExMap.SpawnProjectile(item.Type, target.Position, item.Scale, (item.UsePlayerVelocity ? target.Velocity : item.Velocity), target.Rotation, item.ThrowForce, item.FuseTime);
                             }
                             else
                             {
@@ -97,6 +94,13 @@ public static class LootManager
                         {
                             target.Inventory.AddItem(item.Type, ItemAddReason.AdminCommand);
                         }
+                    }
+                }
+                else if (item.IsCandy && item.CandyType != CandyKindID.None)
+                {
+                    for (var x = 0; x < item.Amount; x++)
+                    {
+                        Scp330Bag.TryAddCandy(target.ReferenceHub, item.CandyType);
                     }
                 }
                 else if (item.IsCustomItem && item.CustomItem != null)
