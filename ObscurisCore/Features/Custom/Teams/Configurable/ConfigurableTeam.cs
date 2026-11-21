@@ -1,10 +1,10 @@
 using System.ComponentModel;
 
-using LabExtended.Core;
-
 using LabExtended.API;
 using LabExtended.API.Custom.Teams;
 
+using LabExtended.Core;
+using LabExtended.Events;
 using LabExtended.Utilities;
 
 using ObscurisCore.Features.Loadouts;
@@ -13,16 +13,21 @@ using PlayerRoles;
 
 using YamlDotNet.Serialization;
 
-using LabExtended.Events;
-
-using LabApi.Events.Arguments.ServerEvents;
-
 using ObscurisCore.Extensions;
 
 using MEC;
 
-using LabApi.Events.Handlers;
 using LabApi.Features.Wrappers;
+
+using LabExtended.Extensions;
+
+using NorthwoodLib.Pools;
+
+using Respawning;
+using Respawning.NamingRules;
+
+using Respawning.Waves;
+using Respawning.Waves.Generic;
 
 namespace ObscurisCore.Features.Custom.Teams.Configurable;
 
@@ -42,7 +47,25 @@ public class ConfigurableTeam : CustomTeamHandler<ConfigurableTeamWave>
     /// Gets the name of the configurable team.
     /// </summary>
     public override string Name { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// How many tokens to deduct from the replaced wave upon spawning.
+    /// </summary>
+    [Description("How many tokens to deduct from the replaced wave upon spawning (also sets the amount of required tokens for spawning).")]
+    public int TokenCost { get; set; } = 0;
 
+    /// <summary>
+    /// The minimum required amount of spawnable players to spawn a wave.
+    /// </summary>
+    [Description("The minimum required amount of spawnable players to spawn a wave.")]
+    public int MinPlayers { get; set; } = 0;
+
+    /// <summary>
+    /// The maximum amount of players that can be spawned in a wave.
+    /// </summary>
+    [Description("The maximum amount of players that can be spawned in a wave.")]
+    public int MaxPlayers { get; set; } = 0;
+    
     /// <summary>
     /// Gets or sets the chance that this team will replace the specified faction.
     /// </summary>
@@ -54,6 +77,12 @@ public class ConfigurableTeam : CustomTeamHandler<ConfigurableTeamWave>
     /// </summary>
     [Description("The faction that this team replaces.")]
     public Faction? ReplacedFaction { get; set; }
+    
+    /// <summary>
+    /// Gets or sets a value indicating whether to deduct tokens from the replaced team.
+    /// </summary>
+    [Description("Whether or not to deduct tokens from the replaced team.")]
+    public bool DeductTokens { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether to use the replaced team's CASSIE announcement.
@@ -84,6 +113,12 @@ public class ConfigurableTeam : CustomTeamHandler<ConfigurableTeamWave>
     /// </summary>
     [Description("List of roles that a player must have to be respawned in this team.")]
     public List<RoleTypeId> AllowedRoles { get; set; } = new();
+    
+    /// <summary>
+    /// Gets or sets the list of roles that a player must not have to be respawned in this team.
+    /// </summary>
+    [Description("List of roles that a player must not have to be respawned in this team.")]
+    public List<RoleTypeId> BlacklistedRoles { get; set; } = new();
 
     /// <summary>
     /// Gets or sets the list of custom CASSIE announcements for this team.
@@ -131,10 +166,7 @@ public class ConfigurableTeam : CustomTeamHandler<ConfigurableTeamWave>
         base.OnRegistered();
 
         ExPlayerEvents.Left += OnPlayerLeft;
-
         ExRoundEvents.Restarting += OnRoundRestart;
-
-        ServerEvents.WaveRespawning += OnWaveRespawning;
 
         ApiLog.Info($"Configurable team &3{configId}&r has been registered.");
     }
@@ -146,7 +178,10 @@ public class ConfigurableTeam : CustomTeamHandler<ConfigurableTeamWave>
     /// <returns><c>true</c> if the player can spawn; otherwise, <c>false</c>.</returns>
     public override bool IsSpawnable(ExPlayer player)
     {
-        return !player.IsTutorial && !player.IsInOverwatch && (AllowedRoles.Count == 0 || AllowedRoles.Contains(player.Role.Type));
+        return !player.IsTutorial 
+               && !player.IsInOverwatch 
+               && (AllowedRoles.Count == 0 || AllowedRoles.Contains(player.Role)) 
+               && !BlacklistedRoles.Contains(player.Role);
     }
 
     /// <summary>
@@ -191,82 +226,161 @@ public class ConfigurableTeam : CustomTeamHandler<ConfigurableTeamWave>
         Selections.Clear();
     }
 
-    private void OnWaveRespawning(WaveRespawningEventArgs args)
+    public static bool TrySpawnWave(List<ExPlayer> players, ConfigurableTeam targetTeam, SpawnableWaveBase originalWave)
     {
-        try
+        var spawnDelay = 0f;
+        var spawnTeam = originalWave.TargetFaction.GetSpawnableTeam();
+
+        if (originalWave is IAnimatedWave animatedWave)
         {
-            if (!ReplacedFaction.HasValue)
-                return;
+            spawnDelay = animatedWave.AnimationDuration;
+            
+            WaveUpdateMessage.ServerSendUpdate(originalWave, UpdateMessageFlags.Trigger);
+        }
+        
+        ApiLog.Debug("ConfigurableTeam", $"Spawning - playing effect (wait: &3{spawnDelay}&rs)");
+        
+        if (spawnDelay > 0f)
+            Timing.CallDelayed(spawnDelay, () => InternalSpawn(true));
+        else
+            InternalSpawn(false);
 
-            if (args.Wave.Faction != ReplacedFaction.Value)
-                return;
-
-            if (ReplacementChance <= 0f)
-                return;
-
-            if (ReplacementChance < 100f && !WeightUtils.GetBool(ReplacementChance))
-                return;
-
-            var list = new List<ExPlayer>();
-
-            foreach (var ply in args.SpawningPlayers)
+        void InternalSpawn(bool wasDelayed)
+        {
+            if (wasDelayed)
             {
-                if (!ply.CastPlayer(out var exPlayer))
-                    continue;
+                ApiLog.Debug("ConfigurableTeam", $"Re-checking player list: &6{players.Count}&r");
 
-                list.Add(exPlayer);
+                players.RemoveAll(p => !p.IsValidPlayer() || !p.IsAlive);
+
+                if (players.Count < 1 || (targetTeam.MinPlayers > 0 && players.Count < targetTeam.MinPlayers))
+                {
+                    WaveManager.Spawn(originalWave);
+
+                    ApiLog.Warn("Not enough valid players to spawn, respawning original team.");
+                    return;
+                }
+
+                ApiLog.Debug("ConfigurableTeam", $"Validated player list: &3{players.Count}&r");
             }
 
-            if (list.Count > 0)
+            if (NamingRulesManager.TryGetNamingRule(spawnTeam, out var namingRule))
+                NamingRulesManager.ServerGenerateName(spawnTeam, namingRule);
+            
+            var wave = targetTeam.Spawn(players);
+
+            if (wave.SpawnedWave != null)
             {
-                args.Wave.PlayRespawnEffect();
-                args.IsAllowed = false;
+                ApiLog.Debug("ConfigurableTeam", $"Spawned a new wave: &3{wave.SpawnedWave.Id}&r");
 
-                Timing.CallDelayed(args.Wave.AnimationTime, () =>
+                if (targetTeam.ReplacementUseCassie)
                 {
-                    list.RemoveAll(p => !p.IsValidPlayer());
+                    ApiLog.Debug("ConfigurableTeam", "Playing base-team CASSIE");
 
-                    if (list.Count < 1)
+                    if (originalWave is IAnnouncedWave announcedWave)
                     {
-                        args.Wave.InitiateRespawn();
-                        
-                        ApiLog.Warn("No valid players to spawn, respawning original team.");
-                        return;
+                        announcedWave.Announcement.PlayAnnouncement(players.Select(x => x.ReferenceHub).ToList(), announcedWave);
                     }
+                }
+                else if (targetTeam.CassieAnnouncements.Count > 0)
+                {
+                    var announcement = targetTeam.CassieAnnouncements.RandomItem();
 
-                    var wave = Spawn(list);
-
-                    if (wave.SpawnedWave != null)
+                    if (!string.IsNullOrEmpty(announcement))
                     {
-                        if (ReplacementUseCassie)
-                        {
-                            args.Wave.PlayAnnouncement(list);
-                        }
-                        else if (CassieAnnouncements.Count > 0)
-                        {
-                            var announcement = CassieAnnouncements.RandomItem();
-
-                            if (!string.IsNullOrEmpty(announcement))
-                            {
-                                Announcer.Message(announcement, string.Empty);
-                            }
-                        }
+                        ApiLog.Debug("ConfigurableTeam", $"Playing custom CASSIE: &3{announcement}&r");
+                        Announcer.Message(announcement, string.Empty);
                     }
                     else
                     {
-                        args.Wave.InitiateRespawn();
-                        
-                        ApiLog.Warn($"Failed to spawn replacement wave: &1{wave.SpawnFail}&r.");
+                        ApiLog.Warn("ConfigurableTeam", $"Selected an empty CASSIE announcement!");
                     }
-                });
+                }
+                else
+                {
+                    ApiLog.Debug("ConfigurableTeam", "No announcement set for this team.");
+                }
+            }
+            else
+            {
+                WaveManager.Spawn(originalWave);
+
+                ApiLog.Warn($"Failed to spawn replacement wave: &1{wave.SpawnFail}&r.");
             }
         }
-        catch (Exception ex)
+
+        return true;
+    }
+    
+    public static bool TryPickPlayers(out List<ExPlayer> players)
+    {
+        ApiLog.Debug("ConfigurableTeam", "Picking players for respawn");
+        
+        players = ExPlayer.Players
+            .Where(p => p.ReferenceHub != null && p.Role.IsSpectator && !p.Role.IsOverwatch && WaveSpawner.CanBeSpawned(p.ReferenceHub))
+            .ToList();
+        
+        ApiLog.Debug("ConfigurableTeam", $"Picked &3{players.Count}&r player(s)");
+        return true;
+    }
+    
+    public static bool TryPickTeam(List<ExPlayer> players, SpawnableWaveBase originalWave, out ConfigurableTeam configurableTeam)
+    {
+        ApiLog.Debug("ConfigurableTeam", $"Selecting configurable team with &3{players.Count}&r player(s) for &3{originalWave.TargetFaction}&r (&6{originalWave.GetType().Name}&r)");
+
+        configurableTeam = null!;
+
+        if (players.Count < 1)
         {
-            ApiLog.Error($"Failed to spawn replacement wave:\n{ex}");
-            
-            args.IsAllowed = true;
+            ApiLog.Debug("ConfigurableTeam", "Not enough players to select!");
+            return false;
         }
+
+        var teamPlayers = ListPool<ExPlayer>.Shared.Rent();
+
+        foreach (var kvp in CustomTeamRegistry.RegisteredHandlers)
+        {
+            if (kvp.Value is not ConfigurableTeam team)
+                continue;
+
+            if (!team.ReplacedFaction.HasValue)
+                continue;
+
+            if (originalWave.TargetFaction != team.ReplacedFaction.Value)
+                continue;
+            
+            teamPlayers.AddRangeWhere(players.OrderByDescending(p => WaveSpawner.CalculatePriority(p.ReferenceHub, originalWave.TargetFaction.GetSpawnableTeam())), team.IsSpawnable);
+
+            if (team.MinPlayers > 0 && teamPlayers.Count < team.MinPlayers)
+                continue;
+            
+            if (team.TokenCost > 0 && originalWave is ILimitedWave limitedWave && limitedWave.RespawnTokens < team.TokenCost)
+                continue;
+
+            if (team.ReplacementChance <= 0f)
+                continue;
+
+            if (team.ReplacementChance < 100f && !WeightUtils.GetBool(team.ReplacementChance))
+                continue;
+
+            configurableTeam = team;
+            
+            players.Clear();
+            
+            players.AddRange(team.MaxPlayers > 0 && teamPlayers.Count > team.MaxPlayers 
+                ? teamPlayers.Take(team.MaxPlayers) 
+                : teamPlayers);
+            
+            ListPool<ExPlayer>.Shared.Return(teamPlayers);
+            
+            ApiLog.Debug("ConfigurableTeam", $"Selected configurable team &3{team.Name}&r for &3{originalWave.TargetFaction}&r (&6{originalWave.GetType().Name}&r)");
+            return true;
+        }
+        
+        ListPool<ExPlayer>.Shared.Return(teamPlayers);
+
+        ApiLog.Debug("ConfigurableTeam", $"Failed to select configurable team for &3{originalWave.TargetFaction}&r (&6{originalWave.GetType().Name}&r)");
+        return false;
     }
 
     private static void Initialize()

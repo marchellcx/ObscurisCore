@@ -34,12 +34,23 @@ public class ConfigurableTeamWave : CustomTeamInstance<ConfigurableTeam>
         if (player.Role.Type != role)
         {
             player.Role.Set(role, RoleChangeReason.Respawn, RoleSpawnFlags.UseSpawnpoint);
+            
+            ApiLog.Debug("ConfigurableTeamWave", $"Spawned player &3{player.UserId}&r with role &1{role}&r.");
         }
         else
         {
             player.RandomSpawnPositionTeleport([role.GetTeam()]);
+            
+            ApiLog.Debug("ConfigurableTeamWave", $"Teleported player &3{player.UserId}&r with role &1{role}&r.");
         }
 
-        LoadoutManager.TryApply(player, loadoutDefinition.Name);
+        if (!LoadoutManager.TryApply(player, loadoutDefinition.Name))
+        {
+            ApiLog.Warn($"Loadout &1{loadoutDefinition.Name}&r for player &3{player.UserId}&r could not be applied.");
+        }
+        else
+        {
+            ApiLog.Debug("ConfigurableTeamWave", $"Loadout &1{loadoutDefinition.Name}&r for player &3{player.UserId}&r was applied.");
+        }
     }
 }

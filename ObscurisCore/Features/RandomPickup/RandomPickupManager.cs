@@ -85,7 +85,6 @@ namespace ObscurisCore.Features.RandomPickup
 
         private static void OnStarted()
         {
-            /*
             foreach (var pair in Config.Spawns)
             {
                 if (pair.Value <= 0f)
@@ -93,8 +92,8 @@ namespace ObscurisCore.Features.RandomPickup
 
                 if (pair.Value < 100f && !WeightUtils.GetBool(pair.Value))
                     continue;
-
-                if (!MapUtilities.TryGet(pair.Key, null, out var position, out var rotation))
+                
+                if (!MapLocations.TryFind(pair.Key, out var position, out var rotation))
                     continue;
 
                 var properties = Config.GlobalProperties;
@@ -109,7 +108,6 @@ namespace ObscurisCore.Features.RandomPickup
                 else
                     ApiLog.Warn("RandomPickup", $"Could not spawn a random pickup instance at &3{pair.Key}&r!");
             }
-            */
         }
 
         private static void OnRestarting()

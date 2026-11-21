@@ -212,9 +212,7 @@ public static class LoadoutManager
             player.Health = loadout.MaxHealth.Value;
 
         foreach (var candy in loadout.Candies)
-        {
             Scp330Bag.TryAddCandy(player.ReferenceHub, candy);
-        }
 
         for (var i = 0; i < loadout.Items.Count; i++)
         {
